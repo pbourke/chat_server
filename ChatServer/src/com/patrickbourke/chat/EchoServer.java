@@ -20,7 +20,7 @@ import java.util.logging.Logger;
  * 
  * @author bourke
  */
-public class Server {
+public class EchoServer {
 	// room
 	// clients in the room
 	// message to the room
