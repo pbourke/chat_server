@@ -3,35 +3,32 @@ package com.patrickbourke.chat;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
 import java.util.Iterator;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Main class for chat server program
+ * Main class for echo server test program.
  * 
- * @author bourke
+ * Usage: run the EchoServer using JVM 1.5/1.6.
+ * 
+ * To connect a client to the server telnet to the server port. ie:
+ *      telnet localhost 1234
+ * 
+ * Type text followed by enter to have it echoed back.
+ * 
+ * @author Patrick Bourke <pb@patrickbourke.com>
  */
 public class EchoServer {
-	// room
-	// clients in the room
-	// message to the room
-	// Users
-	// private message
-	
-	// echo server.
-	// Usage: Run this server and telnet to localhost port 1234
 	public static void main(String[] args) {
 		final Logger log = Logger.getLogger("chat");
 		try {
+		    // open the Server socket, bind it to an address 
+		    // and configure it for non-blocking operation
 			log.info("Starting Server");
 			final ServerSocketChannel serverChannel = ServerSocketChannel.open();
 			serverChannel.configureBlocking(false);
@@ -39,15 +36,24 @@ public class EchoServer {
 			
 			final Selector selector = Selector.open();
 			serverChannel.register(selector, SelectionKey.OP_ACCEPT);
+
+			final ByteBuffer inputBuf = ByteBuffer.allocate(1024);
 			
+			// main event loop - accept new connections and handle read and write
+			// operations
 			while (true) {
+			    // are there any pending events?
 				int numReady = selector.select();
 				if ( numReady <= 0 ) {
 					continue;
 				}
 				
+				// process each event (ready SelectionKey) in sequence
 				for ( Iterator<SelectionKey> iter = selector.selectedKeys().iterator();
 					  iter.hasNext(); ) {
+				    
+				    // obtain the key and ensure that it's valid before doing anything
+				    // with it
 					SelectionKey key = iter.next();
 					iter.remove();
 					
@@ -66,31 +72,41 @@ public class EchoServer {
 					
 					// handle reading client message and connection close
 					if ( key.isReadable() ) {
-						final ByteBuffer msgBuf = ByteBuffer.allocate(1024);
-						final int numBytesRead = ((SocketChannel)key.channel()).read(msgBuf);
+                        // read the message
+						final int numBytesRead = ((SocketChannel)key.channel()).read(inputBuf);
 						if ( numBytesRead == -1 ) {
 							// client closed connection
 							log.info("Client closed the connection");
+							
+							// remove SelectionKey from the Selector so that we receive no more events
+							// from it
 							key.channel().close();
 							key.cancel();
+	                        inputBuf.clear();
 							continue;
 						}
 
-						// read the message
-						msgBuf.flip();
+						log.info("Read " + numBytesRead + " bytes from the client");
+						// flip() makes the buffer ready for reading - sets position to 0 and 
+						// limit to the previous position
+						inputBuf.flip();
 						
-						// create a return message and register interest in a write event
-						final ByteBuffer returnBuf = ByteBuffer.allocate(1040);
-						returnBuf.put("YOU SAID: ".getBytes(), 0, "YOU SAID: ".length());
-						returnBuf.put(msgBuf.array(), 0, msgBuf.limit());
-						returnBuf.flip();
+						// create a return message and register interest in a write event, which
+						// will be handled in a subsequent event
+						final ByteBuffer outputBuf = ByteBuffer.allocate(1040);
+						outputBuf.put("YOU SAID: ".getBytes(), 0, "YOU SAID: ".length());
+						outputBuf.put(inputBuf.array(), 0, inputBuf.limit());
+						outputBuf.flip();
 						key.interestOps(SelectionKey.OP_WRITE);
-						key.attach(returnBuf);
-						msgBuf.clear();
+						
+						// associate the return message buffer with the key, so that the write event
+						// can write it to the appropriate channel						
+						key.attach(outputBuf);
+						inputBuf.clear();
 					}
 					
+					// handle echo back to the client
 					if ( key.isWritable() ) {
-						log.info("Writing echo message to the client");
 						// write the attachment to the channel						
 						ByteBuffer msg = (ByteBuffer) key.attachment();
 						int bytesWritten = ((SocketChannel)key.channel()).write(msg);
