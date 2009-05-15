@@ -24,7 +24,10 @@ import java.util.logging.Logger;
  * @author Patrick Bourke <pb@patrickbourke.com>
  */
 public class EchoServer {
-	public static void main(String[] args) {
+	private static final String OUTPUT_MSG_PREFIX = "YOU SAID: ";
+    private static final int INPUT_BUF_SIZE = 512;
+
+    public static void main(String[] args) {
 		final Logger log = Logger.getLogger("chat");
 		try {
 		    // open the Server socket, bind it to an address 
@@ -37,7 +40,7 @@ public class EchoServer {
 			final Selector selector = Selector.open();
 			serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
-			final ByteBuffer inputBuf = ByteBuffer.allocate(1024);
+			final ByteBuffer inputBuf = ByteBuffer.allocate(INPUT_BUF_SIZE);
 			
 			// main event loop - accept new connections and handle read and write
 			// operations
@@ -93,8 +96,9 @@ public class EchoServer {
 						
 						// create a return message and register interest in a write event, which
 						// will be handled in a subsequent event
-						final ByteBuffer outputBuf = ByteBuffer.allocate(1040);
-						outputBuf.put("YOU SAID: ".getBytes(), 0, "YOU SAID: ".length());
+						final int prefixLen = OUTPUT_MSG_PREFIX.length();
+                        final ByteBuffer outputBuf = ByteBuffer.allocate(prefixLen + INPUT_BUF_SIZE);
+                        outputBuf.put(OUTPUT_MSG_PREFIX.getBytes(), 0, prefixLen);
 						outputBuf.put(inputBuf.array(), 0, inputBuf.limit());
 						outputBuf.flip();
 						key.interestOps(SelectionKey.OP_WRITE);
@@ -108,7 +112,10 @@ public class EchoServer {
 					// handle echo back to the client
 					if ( key.isWritable() ) {
 						// write the attachment to the channel						
-						ByteBuffer msg = (ByteBuffer) key.attachment();
+						final ByteBuffer msg = (ByteBuffer) key.attachment();
+						if ( msg == null ) {
+						    continue;
+						}
 						int bytesWritten = ((SocketChannel)key.channel()).write(msg);
 						log.info("Wrote " + bytesWritten + " bytes to the client");
 
