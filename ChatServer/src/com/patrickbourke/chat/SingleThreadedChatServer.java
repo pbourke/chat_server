@@ -12,23 +12,21 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Main class for echo server test program.
+ * Main class for single-threaded chat server test program.
  * 
  * Usage: run the EchoServer using JVM 1.5/1.6.
  * 
  * To connect a client to the server telnet to the server port. ie:
  *      telnet localhost 1234
  * 
- * Type text followed by enter to have it echoed back.
- * 
  * @author Patrick Bourke <pb@patrickbourke.com>
  */
-public class EchoServer {
+public class SingleThreadedChatServer {
 	private static final String OUTPUT_MSG_PREFIX = "YOU SAID: ";
     private static final int INPUT_BUF_SIZE = 512;
 
     public static void main(String[] args) {
-		final Logger log = Logger.getLogger("echo");
+		final Logger log = Logger.getLogger("st-chat");
 		try {
 		    // open the Server socket, bind it to an address 
 		    // and configure it for non-blocking operation
@@ -73,7 +71,7 @@ public class EchoServer {
 						socketChannel.register(key.selector(), SelectionKey.OP_READ);
 					}
 					
-					// handle reading client message and connection close
+					// handle reading client messages and connection close
 					if ( key.isReadable() ) {
                         // read the message
 						final int numBytesRead = ((SocketChannel)key.channel()).read(inputBuf);
@@ -89,41 +87,15 @@ public class EchoServer {
 							continue;
 						}
 
-						log.info("Read " + numBytesRead + " bytes from the client");
-						// flip() makes the buffer ready for reading - sets position to 0 and 
-						// limit to the previous position
-						inputBuf.flip();
 						
-						// create a return message and register interest in a write event, which
-						// will be handled in a subsequent event
-						final int prefixLen = OUTPUT_MSG_PREFIX.length();
-                        final ByteBuffer outputBuf = ByteBuffer.allocate(prefixLen + INPUT_BUF_SIZE);
-                        outputBuf.put(OUTPUT_MSG_PREFIX.getBytes(), 0, prefixLen);
-						outputBuf.put(inputBuf.array(), 0, inputBuf.limit());
-						outputBuf.flip();
-						key.interestOps(SelectionKey.OP_WRITE);
-						
-						// associate the return message buffer with the key, so that the write event
-						// can write it to the appropriate channel						
-						key.attach(outputBuf);
-						inputBuf.clear();
 					}
 					
-					// handle echo back to the client
+					// handle writing to clients
 					if ( key.isWritable() ) {
 						// write the attachment to the channel						
 						final ByteBuffer msg = (ByteBuffer) key.attachment();
 						if ( msg == null ) {
 						    continue;
-						}
-						int bytesWritten = ((SocketChannel)key.channel()).write(msg);
-						log.info("Wrote " + bytesWritten + " bytes to the client");
-
-						// if any data remains, keep in write mode
-						// otherwise, flip to read mode
-						if ( !msg.hasRemaining() ) {
-							key.attach(null);
-							key.interestOps(SelectionKey.OP_READ);
 						}
 					}
 				}
